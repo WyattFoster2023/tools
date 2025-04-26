@@ -1,3 +1,4 @@
+import importlib
 import os
 import shutil
 import sys
@@ -72,7 +73,8 @@ def self_update():
         save_last_commit(latest_commit)
         print("[INFO] Restarting to load updates...\n")
         # Restart the script in the same terminal session
-        os.execv(sys.executable, ['python'] + sys.argv)
+        importlib.reload(sys.modules[__name__])
+
     else:
         print("[INFO] Already up to date.")
 
