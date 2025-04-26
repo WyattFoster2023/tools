@@ -1,0 +1,1 @@
+py -m pyftpdlib -p 2121 -w -d C:\Content\PhoneDrops
