@@ -1,6 +1,4 @@
 import os
-import tkinter as tk
-from tkinter import filedialog
 from ftplib import FTP, error_perm
 from tqdm import tqdm
 
@@ -28,6 +26,8 @@ class FTPUploader:
         self.retries = retries
         self.timeout = timeout
         self.ftp = None
+        
+        self.ftp_connect()
 
     def ftp_connect(self):
         """Establishes FTP connection and logs in."""
@@ -102,43 +102,3 @@ class FTPUploader:
             self.upload_file(path)
 
 
-def main():
-    uploader = FTPUploader(
-        host='192.168.0.170',
-        port=2121,
-        user='anonymous',
-        passwd='',
-        remote_dir='',
-        block_size=8192,
-        retries=3
-    )
-
-    try:
-        uploader.ftp_connect()
-    except Exception as e:
-        print(f"[FATAL] Could not connect: {e}")
-        return
-
-    # File selection dialog
-    root = tk.Tk()
-    root.withdraw()
-    file_paths = filedialog.askopenfilenames(title="Select file(s) to upload")
-    root.destroy()
-
-    if not file_paths:
-        print("[INFO] No files selected. Exiting.")
-        uploader.disconnect()
-        return
-
-    # Perform uploads
-    uploader.upload_files(file_paths)
-    uploader.disconnect()
-    print("[INFO] All done.")
-
-if __name__ == '__main__':
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("[INFO] Upload canceled by user.")
-    except Exception as e:
-        print(f"[FATAL] Unexpected error: {e}")

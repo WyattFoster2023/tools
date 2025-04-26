@@ -2,6 +2,7 @@ import os
 import psutil
 import ctypes
 import keyboard
+import time
 from ctypes import wintypes
 
 # Constants
@@ -20,7 +21,7 @@ class THREADENTRY32(ctypes.Structure):
         ("dwFlags", wintypes.DWORD),
     ]
 
-# Functions
+# Function declarations from kernel32
 CreateToolhelp32Snapshot = ctypes.windll.kernel32.CreateToolhelp32Snapshot
 Thread32First = ctypes.windll.kernel32.Thread32First
 Thread32Next = ctypes.windll.kernel32.Thread32Next
@@ -47,8 +48,7 @@ def get_thread_ids(pid):
 
 def suspend_process(pid):
     try:
-        thread_ids = get_thread_ids(pid)
-        for tid in thread_ids:
+        for tid in get_thread_ids(pid):
             h_thread = OpenThread(THREAD_SUSPEND_RESUME, False, tid)
             if h_thread:
                 SuspendThread(h_thread)
@@ -59,8 +59,7 @@ def suspend_process(pid):
 
 def resume_process(pid):
     try:
-        thread_ids = get_thread_ids(pid)
-        for tid in thread_ids:
+        for tid in get_thread_ids(pid):
             h_thread = OpenThread(THREAD_SUSPEND_RESUME, False, tid)
             if h_thread:
                 while ResumeThread(h_thread) > 0:
@@ -94,16 +93,58 @@ def toggle_process(pid):
     else:
         suspend_process(pid)
 
+# Debug/debounce mechanism to prevent multiple toggles on a single keypress
+last_toggle_time = 0
+last_autorun_time = 0
+DEBOUNCE_DELAY = 0.5  # seconds
+
+# Global variable to track autorun state
+autorun_active = False
+
+def toggle_process_callback():
+    global last_toggle_time
+    current_time = time.time()
+    # Check if enough time has passed to consider this a new key event
+    if current_time - last_toggle_time < DEBOUNCE_DELAY:
+        print("Toggle process call debounced.")
+        return
+    last_toggle_time = current_time
+    print("Toggling process state...")
+    toggle_process(pid)
+
+def toggle_autorun_callback():
+    global last_autorun_time, autorun_active
+    current_time = time.time()
+    if current_time - last_autorun_time < DEBOUNCE_DELAY:
+        print("Toggle autorun call debounced.")
+        return
+    last_autorun_time = current_time
+    if autorun_active:
+        keyboard.release('w')
+        print("Autorun deactivated.")
+    else:
+        keyboard.press('w')
+        print("Autorun activated.")
+    autorun_active = not autorun_active
+
 if __name__ == "__main__":
-    target = r"C:\Program Files (x86)\Steam\steamapps\common\theHunterCotW\theHunterCotW_F.exe"  # Replace with full path or process name
+    target = r"C:\Program Files (x86)\Steam\steamapps\common\theHunterCotW\theHunterCotW_F.exe"
     pid = find_pid_by_path_or_name(target)
     if pid is None:
         print("Process not found.")
         exit()
 
-    print(f"Monitoring process {pid}. Press Ctrl+Alt+S to suspend, Ctrl+Alt+R to resume.")
+    print(f"Monitoring process {pid}.")
+    print("Press Ctrl+Caps Lock+S to toggle process state.")
+    print("Press Ctrl+Caps Lock+W to toggle autorun (hold/release 'w').")
+    print("Press Ctrl+Alt+E to exit.")
 
-    keyboard.add_hotkey('ctrl+caps lock+s', lambda: toggle_process(pid))
+    # Hotkeys without trigger_on_release can fire repeatedly if keys are held down.
+    # The debounce callbacks help to prevent multiple toggles.
+    keyboard.add_hotkey('-', toggle_process_callback)
+    keyboard.add_hotkey('=', toggle_autorun_callback)
 
-    keyboard.wait('ctrl+alt+e')  # Keep the script running
-    resume_process(pid)  # Ensure the process is resumed before exiting
+    keyboard.wait('ctrl+alt+e')
+    if autorun_active:
+        keyboard.release('w')
+    resume_process(pid)

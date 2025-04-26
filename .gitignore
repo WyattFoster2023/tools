@@ -1,0 +1,2 @@
+# Ignore self-update state file
+.update_state.json
