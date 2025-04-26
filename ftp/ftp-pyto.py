@@ -70,19 +70,34 @@ def gather_items():
             except Exception as e:
                 print(f"[WARN] provider.open() failed for {name}: {e}")
             
-            # 3) Fallback: use .data(uti) for each supported UTI
+            # 3) Fallback: look for a file-URL UTI and copy the actual file
             for uti in provider.get_type_identifiers():
+                if uti == "public.file-url":
+                    try:
+                        url_bytes = provider.data(uti)
+                        url = url_bytes.decode("utf-8")          # "file:///private/var/…/XYZ.mov"
+                        path = urllib.parse.urlparse(url).path   # "/private/var/…/XYZ.mov"
+                        shutil.copy(path, local_path)
+                        items.append((open(local_path, "rb"), name))
+                        print(f"[INFO] Copied {name} via file-URL")
+                        break
+                    except Exception as e:
+                        print(f"[WARN] file-url copy failed for {name}: {e}")
+                        continue
+
+                # if it's not a file-URL, you can still try to grab raw data:
                 try:
-                    data = provider.data(uti)     # may be large, but we write it out immediately
-                    with open(local_path, "wb") as dst:
-                        dst.write(data)
-                    items.append((open(local_path, "rb"), name))
-                    print(f"[INFO] Used .data({uti}) for {name}")
-                    break
+                    data = provider.data(uti)
+                    if data:
+                        with open(local_path, "wb") as dst:
+                            dst.write(data)
+                        items.append((open(local_path, "rb"), name))
+                        print(f"[INFO] Wrote {name} from .data({uti})")
+                        break
                 except Exception:
                     continue
             else:
-                print(f"[ERROR] Couldn’t buffer {name}; skipping.")
+                print(f"[ERROR] No workable UTI for {name}, skipping.")
     
     else:
         # No attachments: pick one photo
