@@ -10,7 +10,7 @@ import photos
 from ftplib import FTP, error_perm
 
 # ─── CONFIGURE THESE ──────────────────────────────────────────────────────────
-HOST       = "192.168.1.170"
+HOST       = "192.168.0.170"
 PORT       = 2121
 USER       = "anonymous"
 PASSWD     = ""
@@ -117,8 +117,10 @@ def main():
     print(f"[INFO] Connecting to {HOST}:{PORT}…")
     ftp.connect(HOST, PORT)
     ftp.login(USER, PASSWD)
+    print(f"[INFO] Logged in as {USER}")
     if REMOTE_DIR:
         ftp.cwd(REMOTE_DIR)
+
 
     for stream, name in items:
         upload_stream(ftp, stream, name)
