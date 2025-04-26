@@ -1,10 +1,13 @@
 import os
 import shutil
+import sys
 import zipfile
 from urllib.request import urlopen
 from io import BytesIO
 import json
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
+
+import subprocess
 
 load_dotenv()
 
@@ -12,9 +15,11 @@ load_dotenv()
 REPO_OWNER = os.getenv('REPO_OWNER', 'WyattFoster2023')
 REPO_NAME = os.getenv('REPO_NAME', 'tools')
 BRANCH = os.getenv('BRANCH', 'main')
-API_URL = os.getenv('API_URL', f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits/{BRANCH}')
-ZIP_URL = os.getenv('ZIP_URL', f'https://github.com/{REPO_OWNER}/{REPO_NAME}/archive/refs/heads/{BRANCH}.zip')
 STATE_FILE = os.getenv('STATE_FILE', '.update_state.json')
+
+# Dynamic URLs
+API_URL = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits/{BRANCH}'
+ZIP_URL = f'https://github.com/{REPO_OWNER}/{REPO_NAME}/archive/refs/heads/{BRANCH}.zip'
 
 def get_latest_commit():
     try:
@@ -44,8 +49,8 @@ def download_and_extract_repo():
             extracted_folder = os.path.join(temp_dir, f'{REPO_NAME}-{BRANCH}')
 
             for item in os.listdir(extracted_folder):
-                if item == STATE_FILE or item == os.path.basename(__file__):
-                    continue  # Don't overwrite state or this script
+                if item == STATE_FILE:
+                    continue  # Don't overwrite state (we want to update this script)
                 s = os.path.join(extracted_folder, item)
                 d = os.path.join('.', item)
                 if os.path.isdir(s):
@@ -65,6 +70,9 @@ def self_update():
         print("[UPDATE] New version detected. Updating...")
         download_and_extract_repo()
         save_last_commit(latest_commit)
+        print("[INFO] Restarting to load updates...\n")
+        # Restart the script in the same terminal session
+        os.execv(sys.executable, ['python'] + sys.argv)
     else:
         print("[INFO] Already up to date.")
 
@@ -76,3 +84,9 @@ if __name__ == '__main__':
         if cmd == 'exit':
             break
         self_update()   # Check for updates before each command
+        
+        try:
+            if cmd == 'ftp':
+                subprocess.run(['python', 'ftp/ftp-uploader-ui.py'])
+        except Exception as e:
+            print(f"[ERROR] Failed to run FTP uploader: {e}")
