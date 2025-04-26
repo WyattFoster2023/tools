@@ -34,59 +34,71 @@ def upload_stream(ftp: FTP, stream, filename: str):
         print(f"[ERROR] Upload failed for {filename!r}: {e}")
 
 def gather_items():
-    """
-    Return a list of (file-like, filename) tuples from either
-    Shortcuts attachments or the photo picker.
-    """
     items = []
     providers = pasteboard.shortcuts_attachments()
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
+    
     if providers:
-        print(f"[INFO] Found {len(providers)} attachment(s) from Shortcuts")
-        for i, provider in enumerate(providers, 1):
-            name = provider.get_suggested_name() or f"attachment_{i}"
+        print(f"[INFO] Found {len(providers)} attachment(s)")
+        
+        for idx, provider in enumerate(providers, 1):
+            # Determine a safe filename
+            name = provider.get_suggested_name() or f"attachment_{idx}"
+            local_path = os.path.join(BUFFER_DIR, name)
+            
+            # 1) Try copying directly from the iOS temp path
             path = provider.get_file_path()
-
             if path:
                 try:
-                    f = open(path, "rb")
-                    items.append((f, name))
+                    shutil.copy(path, local_path)
+                    items.append((open(local_path, "rb"), name))
                     continue
-                except FileNotFoundError:
-                    print(f"[WARNING] Path not accessible for {name!r}, falling back to streaming and buffering.")
-
-            # Fallback: read from stream and write to disk
-            with provider.open() as source:
-                local_path = os.path.join(BUFFER_DIR, name)
-                with open(local_path, "wb") as target:
-                    while True:
-                        chunk = source.read(8192)
-                        if not chunk:
-                            break
-                        target.write(chunk)
-
-            f = open(local_path, "rb")
-            items.append((f, name))
+                except Exception as e:
+                    print(f"[WARN] Couldn’t copy {name} from '{path}': {e}")
+            
+            # 2) Try the documented .open() context manager
+            try:
+                with provider.open() as src:
+                    with open(local_path, "wb") as dst:
+                        # Stream-copy in 8K chunks
+                        while True:
+                            chunk = src.read(8192)
+                            if not chunk:
+                                break
+                            dst.write(chunk)
+                items.append((open(local_path, "rb"), name))
+                continue
+            except Exception as e:
+                print(f"[WARN] provider.open() failed for {name}: {e}")
+            
+            # 3) Fallback: use .data(uti) for each supported UTI
+            for uti in provider.get_type_identifiers():
+                try:
+                    data = provider.data(uti)     # may be large, but we write it out immediately
+                    with open(local_path, "wb") as dst:
+                        dst.write(data)
+                    items.append((open(local_path, "rb"), name))
+                    print(f"[INFO] Used .data({uti}) for {name}")
+                    break
+                except Exception:
+                    continue
+            else:
+                print(f"[ERROR] Couldn’t buffer {name}; skipping.")
+    
     else:
-        # Fallback: pick a single photo
+        # No attachments: pick one photo
         print("[INFO] No Shortcut attachments; opening photo picker…")
         img = photos.pick_photo()
-        if img is None:
-            print("[ERROR] No photo selected; exiting.")
+        if not img:
+            print("[ERROR] No photo selected.")
             return []
-
-        # Generate unique filename
-        img_bytes = img.tobytes()
-        short_hash = hashlib.md5(img_bytes).hexdigest()[:3]
-        filename = f"photo_{timestamp}_{short_hash}.jpg"
-
-        # Serialize to an in-memory JPEG
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG")
-        buf.seek(0)
-        items.append((buf, filename))
-
+        
+        # Photo → in-memory buffer → disk
+        name = photos.get_last_photo_metadata().get("filename", "photo.jpg")
+        local_path = os.path.join(BUFFER_DIR, name)
+        with open(local_path, "wb") as dst:
+            img.save(dst, format="JPEG")
+        items.append((open(local_path, "rb"), name))
+    
     return items
 
 
