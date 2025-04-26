@@ -23,7 +23,7 @@ ZIP_URL = f'https://github.com/{REPO_OWNER}/{REPO_NAME}/archive/refs/heads/{BRAN
 
 def get_latest_commit():
     try:
-        with urlopen(API_URL) as response:
+        with urlopen(API_URL, timeout=6) as response:
             data = json.loads(response.read())
             return data['sha']
     except Exception as e:
