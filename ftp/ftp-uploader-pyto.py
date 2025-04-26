@@ -5,21 +5,28 @@ import shutil
 from ftplib import FTP, error_perm
 from dotenv import load_dotenv
 
-from ftp.ftp import FTPUploader
-
 # Load environment variables from .env file
 load_dotenv()
 
-# Get FTP configuration from environment variables
+
+# ─── CONFIG ──────────────────────────────────────────────────────────────────
 FTP_HOST = os.getenv('FTP_HOST', '192.168.0.170')
 FTP_PORT = int(os.getenv('FTP_PORT', '2121'))
 FTP_USER = os.getenv('FTP_USER', 'anonymous')
 FTP_PASS = os.getenv('FTP_PASS', '')
 FTP_REMOTE_DIR = os.getenv('FTP_REMOTE_DIR', '')
-FTP_BLOCK_SIZE = int(os.getenv('FTP_BLOCK_SIZE', '8192'))
-FTP_RETRIES = int(os.getenv('FTP_RETRIES', '3'))
 BUFFER_DIR = "file-buffer"
+# ─────────────────────────────────────────────────────────────────────────────
 
+
+def upload_stream(ftp: FTP, stream, filename: str):
+    try:
+        ftp.storbinary(f"STOR {filename}", stream)
+        print(f"[SUCCESS] Uploaded {filename!r}")
+    except error_perm as e:
+        print(f"[ERROR] Permission denied for {filename!r}: {e}")
+    except Exception as e:
+        print(f"[ERROR] Upload failed for {filename!r}: {e}")
 
 def gather_buffered_files():
     """
@@ -35,7 +42,8 @@ def gather_buffered_files():
         path = os.path.join(BUFFER_DIR, fname)
         if os.path.isfile(path):
             try:
-                items.append(path)
+                f = open(path, "rb")
+                items.append((f, fname))
             except Exception as e:
                 print(f"[WARN] Couldn't open {fname!r}: {e}")
     return items
@@ -48,33 +56,33 @@ def clean_buffer():
     print(f"[INFO] Emptied buffer dir '{BUFFER_DIR}'")
 
 def main():
-    try:
-        uploader = FTPUploader(
-            host=FTP_HOST,
-            port=FTP_PORT,
-            user=FTP_USER,
-            passwd=FTP_PASS,    
-            remote_dir=FTP_REMOTE_DIR,
-            block_size=FTP_BLOCK_SIZE,
-            retries=FTP_RETRIES
-        )
-        # 1) Gather files
-        items = gather_buffered_files()
-        if not items:
-            print("[INFO] No files to upload. Exiting.")
-            return
-        
-        # 2) Upload files
-        uploader.upload_files(items)
-        
-        # 4) Finish FTP session
-        uploader.disconnect()
-        print("[INFO] FTP session closed.")
+    # 1) Gather files
+    items = gather_buffered_files()
+    if not items:
+        print("[INFO] No files to upload. Exiting.")
+        return
 
-        # 5) Clean buffer folder
-        clean_buffer()
-    except Exception as e:
-        print(f"[ERROR] An error occurred: {e}")
+    # 2) Connect & login
+    ftp = FTP()
+    print(f"[INFO] Connecting to {FTP_HOST}:{FTP_PORT}…")
+    ftp.connect(FTP_HOST, FTP_PORT)
+    ftp.login(FTP_USER, FTP_PASS)
+    print(f"[INFO] Logged in as {FTP_USER!r}")
+    if FTP_REMOTE_DIR:
+        ftp.cwd(FTP_REMOTE_DIR)
+        print(f"[INFO] Changed to remote dir '{FTP_REMOTE_DIR}'")
+
+    # 3) Upload each file
+    for stream, name in items:
+        upload_stream(ftp, stream, name)
+        stream.close()
+
+    # 4) Finish FTP session
+    ftp.quit()
+    print("[INFO] FTP session closed.")
+
+    # 5) Clean buffer folder
+    clean_buffer()
 
 if __name__ == "__main__":
     main()
