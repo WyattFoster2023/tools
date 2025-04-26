@@ -1,18 +1,25 @@
 # ftp-pyto.py
 
+import datetime
+import hashlib
 import os
 import io
+import shutil
 import pasteboard
 import photos
 from ftplib import FTP, error_perm
 
 # ─── CONFIGURE THESE ──────────────────────────────────────────────────────────
-HOST       = "192.168.1.17"
+HOST       = "192.168.1.170"
 PORT       = 2121
 USER       = "anonymous"
 PASSWD     = ""
 REMOTE_DIR = ""   # e.g. "uploads/photos"
+
+BUFFER_DIR = "file-buffer"
 # ─────────────────────────────────────────────────────────────────────────────
+
+os.makedirs(BUFFER_DIR, exist_ok=True)
 
 def upload_stream(ftp: FTP, stream, filename: str):
     """
@@ -33,6 +40,7 @@ def gather_items():
     """
     items = []
     providers = pasteboard.shortcuts_attachments()
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
     if providers:
         print(f"[INFO] Found {len(providers)} attachment(s) from Shortcuts")
@@ -41,12 +49,24 @@ def gather_items():
             path = provider.get_file_path()
 
             if path:
-                # Physical file on disk — stream it
-                f = open(path, "rb")
-            else:
-                # Stream via the provider API
-                f = provider.open()
+                try:
+                    f = open(path, "rb")
+                    items.append((f, name))
+                    continue
+                except FileNotFoundError:
+                    print(f"[WARNING] Path not accessible for {name!r}, falling back to streaming and buffering.")
 
+            # Fallback: read from stream and write to disk
+            with provider.open() as source:
+                local_path = os.path.join(BUFFER_DIR, name)
+                with open(local_path, "wb") as target:
+                    while True:
+                        chunk = source.read(8192)
+                        if not chunk:
+                            break
+                        target.write(chunk)
+
+            f = open(local_path, "rb")
             items.append((f, name))
     else:
         # Fallback: pick a single photo
@@ -56,38 +76,48 @@ def gather_items():
             print("[ERROR] No photo selected; exiting.")
             return []
 
+        # Generate unique filename
+        img_bytes = img.tobytes()
+        short_hash = hashlib.md5(img_bytes).hexdigest()[:3]
+        filename = f"photo_{timestamp}_{short_hash}.jpg"
+
         # Serialize to an in-memory JPEG
         buf = io.BytesIO()
         img.save(buf, format="JPEG")
         buf.seek(0)
-        items.append((buf, "photo.jpg"))
+        items.append((buf, filename))
 
     return items
 
+
+def clean_buffer():
+    if os.path.exists(BUFFER_DIR):
+        shutil.rmtree(BUFFER_DIR)
+        print(f"[INFO] Cleaned up '{BUFFER_DIR}' directory.")
+
+
 def main():
-    # 1) Gather items
     items = gather_items()
     if not items:
         return
 
-    # 2) Connect to FTP
     ftp = FTP()
     print(f"[INFO] Connecting to {HOST}:{PORT}…")
     ftp.connect(HOST, PORT)
     ftp.login(USER, PASSWD)
-    print(f"[INFO] Logged in as {USER!r}")
     if REMOTE_DIR:
         ftp.cwd(REMOTE_DIR)
-        print(f"[INFO] Changed directory to {REMOTE_DIR!r}")
 
-    # 3) Upload each
     for stream, name in items:
         upload_stream(ftp, stream, name)
         stream.close()
 
-    # 4) Cleanup
     ftp.quit()
     print("[INFO] FTP session closed.")
+
+    # Cleanup
+    clean_buffer()
+
 
 if __name__ == "__main__":
     main()
