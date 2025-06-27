@@ -1,0 +1,9 @@
+setup.py
+raster_to_svg/__init__.py
+raster_to_svg/__main__.py
+raster_to_svg.egg-info/PKG-INFO
+raster_to_svg.egg-info/SOURCES.txt
+raster_to_svg.egg-info/dependency_links.txt
+raster_to_svg.egg-info/desktop.ini
+raster_to_svg.egg-info/entry_points.txt
+raster_to_svg.egg-info/top_level.txt

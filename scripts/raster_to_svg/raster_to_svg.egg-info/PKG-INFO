@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: raster_to_svg
+Version: 0.1.0
+Summary: Batch convert PNGs to SVGs using alpha channel and Potrace
+Author: Your Name
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Dynamic: author
+Dynamic: classifier
+Dynamic: requires-python
+Dynamic: summary

@@ -1,0 +1,2 @@
+[console_scripts]
+raster-to-svg = raster_to_svg.__main__:main

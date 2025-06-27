@@ -1,2 +1,5 @@
 # Ignore self-update state file
 .update_state.json
+
+# Ignore any tmp folder, even in subfolders
+tmp/
