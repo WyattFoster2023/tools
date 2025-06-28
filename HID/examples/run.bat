@@ -1,0 +1,1 @@
+python C:\Projects\tools\transcribe\whisperdesktop.py

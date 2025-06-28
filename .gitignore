@@ -1,5 +1,3 @@
-# Ignore self-update state file
+.venv/
 .update_state.json
-
-# Ignore any tmp folder, even in subfolders
 tmp/
